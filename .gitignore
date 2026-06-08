@@ -1,0 +1,41 @@
+# === Node / npm ===
+node_modules/
+npm-debug.log*
+.npm
+
+# === Next.js ===
+apps/web/.next/
+apps/web/out/
+
+# === TypeScript ===
+packages/shared-types/dist/
+*.tsbuildinfo
+
+# === Environment variables ===
+.env
+.env.local
+.env.*.local
+
+# === Flutter / Dart ===
+apps/mobile/.dart_tool/
+apps/mobile/build/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/pubspec.lock
+*.iml
+
+# === Supabase ===
+supabase/.temp/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini

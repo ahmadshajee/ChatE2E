@@ -1,0 +1,14 @@
+# Supabase Configuration (Placeholder)
+# Replace these values with your actual Supabase project configuration
+
+[project]
+id = "YOUR_SUPABASE_PROJECT_ID_HERE"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+
+[studio]
+port = 54323

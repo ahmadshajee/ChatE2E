@@ -1,0 +1,41 @@
+name: chatizy_mobile
+description: "Chatizy - WhatsApp-like E2EE Chat App (Mobile Client)"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Supabase
+  supabase_flutter: ^2.8.0
+
+  # Utilities
+  uuid: ^4.5.1
+  shared_preferences: ^2.5.3
+  intl: ^0.20.0
+
+  # Local database (Drift/SQLite)
+  drift: ^2.22.1
+  drift_flutter: ^0.2.4
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+  # Cryptography (X25519, Ed25519, AES-256-GCM)
+  cryptography: ^2.7.0
+  cryptography_flutter: ^2.3.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.22.1
+  build_runner: ^2.4.14
+
+flutter:
+  uses-material-design: true
+

@@ -1,0 +1,21 @@
+{
+  "name": "chatizy-e2ee",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WhatsApp-like E2EE chat application",
+  "workspaces": [
+    "apps/web",
+    "packages/shared-types"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:types": "npm run build --workspace=packages/shared-types",
+    "build:all": "npm run build:types && npm run build:web",
+    "lint:web": "npm run lint --workspace=apps/web",
+    "clean": "rm -rf node_modules apps/web/node_modules apps/web/.next packages/shared-types/node_modules packages/shared-types/dist"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
