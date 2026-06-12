@@ -100,7 +100,7 @@ class DeviceService {
       final registeredDeviceId = deviceResponse['id'] as String;
 
       // 7. Bulk-insert one-time prekeys
-      final prekeyRows = oneTimePrekeys.map((pk) => {
+      final prekeyRows = oneTimePrekeys.map((pk) => <String, dynamic>{
         'device_id': registeredDeviceId,
         'prekey_id': pk['prekey_id'],
         'public_key': pk['public_key'],

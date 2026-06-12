@@ -49,7 +49,7 @@ class PrekeyMessageHeader {
     this.usedOneTimePrekeyId,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson() => <String, dynamic>{
     'ephemeral_public_key': ephemeralPublicKey,
     'sender_identity_key': senderIdentityKey,
     'used_one_time_prekey_id': usedOneTimePrekeyId,

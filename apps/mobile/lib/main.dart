@@ -21,7 +21,7 @@ Future<void> main() async {
   // Initialize Supabase
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
-    publishableKey: SupabaseConfig.supabaseAnonKey,
+    anonKey: SupabaseConfig.supabaseAnonKey,
   );
 
   runApp(ChatizyApp(db: appDatabase));

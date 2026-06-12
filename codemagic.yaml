@@ -1,6 +1,16 @@
+# ============================================================
+#  CodeMagic CI/CD Configuration
+#  Chatizy E2EE Mobile App — iOS Deployment
+#
+#  Two workflows:
+#  1. ios-unsigned   — Debug build on develop/feature branches
+#  2. ios-signed     — Signed release for App Store / TestFlight
+# ============================================================
+
 workflows:
+  # ── Unsigned Development Build ───────────────────────────────
   ios-unsigned:
-    name: iOS Build (Unsigned)
+    name: iOS Build (Unsigned Dev)
     max_build_duration: 60
     instance_type: mac_mini_m2
     working_directory: apps/mobile
@@ -12,56 +22,125 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: '*'
+        - pattern: develop
+        - pattern: 'feature/*'
+      cancel_previous_builds: true
     scripts:
-      - name: Setup Flutter Tooling
+      - name: Flutter Doctor
         script: |
-          flutter doctor
-      - name: Fetch Flutter Dependencies
+          flutter doctor -v
+
+      - name: Fetch Dependencies
         script: |
           flutter pub get
+
+      - name: Analyze Code
+        script: |
+          flutter analyze --no-fatal-infos
+
       - name: Build iOS Archive (Unsigned)
         script: |
-          flutter build ipa --debug --no-codesign
-    artifacts:
-      - build/ios/archive/*.xcarchive
-      - build/ios/ipa/*.ipa
+          flutter build ios --debug --no-codesign
 
+    artifacts:
+      - build/ios/iphoneos/*.app
+      - flutter_drive.log
+
+  # ── Signed Release Build (App Store / TestFlight) ────────────
   ios-signed:
-    name: iOS Build (Signed Release)
-    max_build_duration: 60
+    name: iOS Release (App Store)
+    max_build_duration: 90
     instance_type: mac_mini_m2
     working_directory: apps/mobile
     environment:
       groups:
-        - app_store_credentials # Define this group in Codemagic UI for Apple API Keys/Certificates
+        - app_store_credentials
+        # ──────────────────────────────────────────────────────
+        # Configure this group in the CodeMagic UI with:
+        #   APP_STORE_CONNECT_ISSUER_ID
+        #   APP_STORE_CONNECT_KEY_IDENTIFIER
+        #   APP_STORE_CONNECT_PRIVATE_KEY (contents of .p8 file)
+        #   CERTIFICATE_PRIVATE_KEY (iOS distribution cert private key)
+        # ──────────────────────────────────────────────────────
+      vars:
+        BUNDLE_ID: "com.chatizy.app"
+        APP_STORE_APPLE_ID: "APP_APPLE_ID_HERE"
+        # Replace APP_APPLE_ID_HERE with the numeric Apple ID from
+        # App Store Connect > App Information > Apple ID
       flutter: stable
       xcode: latest
       cocoapods: default
     triggering:
       events:
         - push
+        - tag
       branch_patterns:
         - pattern: main
+      tag_patterns:
+        - pattern: 'v*'
+      cancel_previous_builds: true
     scripts:
-      - name: Fetch Flutter Dependencies
+      - name: Flutter Doctor
+        script: |
+          flutter doctor -v
+
+      - name: Fetch Dependencies
         script: |
           flutter pub get
+
+      - name: Analyze Code
+        script: |
+          flutter analyze --no-fatal-infos
+
       - name: Initialize Keychain
         script: |
           keychain initialize
-      - name: Fetch iOS Certificates and Profiles
+
+      - name: Fetch Signing Certificates & Profiles
         script: |
-          # Codemagic CLI will automatically fetch certificates using credentials group
-          app-store-connect fetch-signing-files "com.chatizy.app" --project-type flutter
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          # This fetches (or creates) the distribution certificate
+          # and App Store provisioning profile for your bundle ID.
+
       - name: Add Certificates to Keychain
         script: |
           keychain add-certificates
-      - name: Configure Provisioning Profiles
+
+      - name: Set Up Provisioning Profiles
         script: |
           xcode-project use-profiles
-      - name: Build Signed iOS IPA
+
+      - name: Auto-Increment Build Number
         script: |
-          flutter build ipa --release
+          # Use the CodeMagic build number for unique builds
+          agvtool new-version -all $(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID") + 1))
+
+      - name: Build Signed IPA
+        script: |
+          flutter build ipa \
+            --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+
     artifacts:
       - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - build/ios/archive/*.xcarchive/dSYMs/*.dSYM
+
+    publishing:
+      app_store_connect:
+        # Credentials come from the 'app_store_credentials' group
+        auth: integration
+        submit_to_testflight: true
+        # Set to true once app is approved for the first time:
+        # submit_to_app_store: false
+        beta_groups:
+          - Internal Testers
+      email:
+        recipients:
+          - ahmad@chatizy.app
+        notify:
+          success: true
+          failure: true
