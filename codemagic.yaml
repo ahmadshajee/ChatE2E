@@ -1,18 +1,39 @@
 # ============================================================
 #  CodeMagic CI/CD Configuration
-#  Chatizy E2EE Mobile App — iOS Unsigned Build
+#  Chatizy E2EE Mobile App — iOS Builds
 #
-#  Produces an unsigned .app and .xcarchive for testing.
-#  No Apple Developer account or certificates required.
+#  Workflow: ios-device
+#    → Development-signed IPA for real device testing
+#    → Requires Apple Developer account ($99/year)
+#    → Set up 'apple_credentials' env group in CodeMagic UI
 # ============================================================
 
 workflows:
-  ios-build:
-    name: iOS Build (Unsigned)
+  ios-device:
+    name: iOS Device Build (Development Signed IPA)
     max_build_duration: 60
     instance_type: mac_mini_m2
     working_directory: apps/mobile
     environment:
+      groups:
+        - apple_credentials
+        # ──────────────────────────────────────────────────────
+        # Create this group in CodeMagic UI → Teams → Settings
+        # → Environment variables, with these 3 variables:
+        #
+        #   APP_STORE_CONNECT_ISSUER_ID
+        #     → App Store Connect → Users & Access → Integrations
+        #       → App Store Connect API → Issuer ID (top of page)
+        #
+        #   APP_STORE_CONNECT_KEY_IDENTIFIER
+        #     → The Key ID of your API key
+        #
+        #   APP_STORE_CONNECT_PRIVATE_KEY
+        #     → Paste the full contents of the .p8 file
+        #       (including -----BEGIN PRIVATE KEY----- lines)
+        # ──────────────────────────────────────────────────────
+      vars:
+        BUNDLE_ID: "com.chatizy.app"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -22,7 +43,6 @@ workflows:
       branch_patterns:
         - pattern: main
         - pattern: develop
-        - pattern: 'feature/*'
       cancel_previous_builds: true
     scripts:
       - name: Flutter Doctor
@@ -37,13 +57,33 @@ workflows:
         script: |
           flutter analyze --no-fatal-infos || true
 
-      - name: Build iOS (Unsigned, No Codesign)
+      - name: Initialize Keychain
         script: |
-          flutter build ios --debug --no-codesign
+          keychain initialize
+
+      - name: Fetch Development Signing Files
+        script: |
+          # This fetches/creates a DEVELOPMENT certificate and profile
+          # (NOT App Store) — just for testing on real devices
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_DEVELOPMENT \
+            --create
+
+      - name: Add Certificates to Keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set Up Provisioning Profiles
+        script: |
+          xcode-project use-profiles
+
+      - name: Build Signed IPA
+        script: |
+          flutter build ipa --debug \
+            --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
-      - build/ios/iphoneos/*.app
-      - flutter_drive.log
+      - build/ios/ipa/*.ipa
 
     publishing:
       email:
