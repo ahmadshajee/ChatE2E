@@ -131,8 +131,11 @@ workflows:
 
     publishing:
       app_store_connect:
-        # Credentials come from the 'app_store_credentials' group
-        auth: integration
+        # Uses API key credentials from the 'app_store_credentials' env group
+        auth: api_key
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         # Set to true once app is approved for the first time:
         # submit_to_app_store: false
