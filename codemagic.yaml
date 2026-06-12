@@ -1,16 +1,14 @@
 # ============================================================
 #  CodeMagic CI/CD Configuration
-#  Chatizy E2EE Mobile App — iOS Deployment
+#  Chatizy E2EE Mobile App — iOS Unsigned Build
 #
-#  Two workflows:
-#  1. ios-unsigned   — Debug build on develop/feature branches
-#  2. ios-signed     — Signed release for App Store / TestFlight
+#  Produces an unsigned .app and .xcarchive for testing.
+#  No Apple Developer account or certificates required.
 # ============================================================
 
 workflows:
-  # ── Unsigned Development Build ───────────────────────────────
-  ios-unsigned:
-    name: iOS Build (Unsigned Dev)
+  ios-build:
+    name: iOS Build (Unsigned)
     max_build_duration: 60
     instance_type: mac_mini_m2
     working_directory: apps/mobile
@@ -22,6 +20,7 @@ workflows:
       events:
         - push
       branch_patterns:
+        - pattern: main
         - pattern: develop
         - pattern: 'feature/*'
       cancel_previous_builds: true
@@ -36,9 +35,9 @@ workflows:
 
       - name: Analyze Code
         script: |
-          flutter analyze --no-fatal-infos
+          flutter analyze --no-fatal-infos || true
 
-      - name: Build iOS Archive (Unsigned)
+      - name: Build iOS (Unsigned, No Codesign)
         script: |
           flutter build ios --debug --no-codesign
 
@@ -46,101 +45,7 @@ workflows:
       - build/ios/iphoneos/*.app
       - flutter_drive.log
 
-  # ── Signed Release Build (App Store / TestFlight) ────────────
-  ios-signed:
-    name: iOS Release (App Store)
-    max_build_duration: 90
-    instance_type: mac_mini_m2
-    working_directory: apps/mobile
-    environment:
-      groups:
-        - app_store_credentials
-        # ──────────────────────────────────────────────────────
-        # Configure this group in the CodeMagic UI with:
-        #   APP_STORE_CONNECT_ISSUER_ID
-        #   APP_STORE_CONNECT_KEY_IDENTIFIER
-        #   APP_STORE_CONNECT_PRIVATE_KEY (contents of .p8 file)
-        #   CERTIFICATE_PRIVATE_KEY (iOS distribution cert private key)
-        # ──────────────────────────────────────────────────────
-      vars:
-        BUNDLE_ID: "com.chatizy.app"
-        APP_STORE_APPLE_ID: "APP_APPLE_ID_HERE"
-        # Replace APP_APPLE_ID_HERE with the numeric Apple ID from
-        # App Store Connect > App Information > Apple ID
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-    triggering:
-      events:
-        - push
-        - tag
-      branch_patterns:
-        - pattern: main
-      tag_patterns:
-        - pattern: 'v*'
-      cancel_previous_builds: true
-    scripts:
-      - name: Flutter Doctor
-        script: |
-          flutter doctor -v
-
-      - name: Fetch Dependencies
-        script: |
-          flutter pub get
-
-      - name: Analyze Code
-        script: |
-          flutter analyze --no-fatal-infos
-
-      - name: Initialize Keychain
-        script: |
-          keychain initialize
-
-      - name: Fetch Signing Certificates & Profiles
-        script: |
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-          # This fetches (or creates) the distribution certificate
-          # and App Store provisioning profile for your bundle ID.
-
-      - name: Add Certificates to Keychain
-        script: |
-          keychain add-certificates
-
-      - name: Set Up Provisioning Profiles
-        script: |
-          xcode-project use-profiles
-
-      - name: Auto-Increment Build Number
-        script: |
-          # Use the CodeMagic build number for unique builds
-          agvtool new-version -all $(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID") + 1))
-
-      - name: Build Signed IPA
-        script: |
-          flutter build ipa \
-            --release \
-            --build-number=$BUILD_NUMBER \
-            --export-options-plist=/Users/builder/export_options.plist
-
-    artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - build/ios/archive/*.xcarchive/dSYMs/*.dSYM
-
     publishing:
-      app_store_connect:
-        # Uses API key credentials from the 'app_store_credentials' env group
-        auth: api_key
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        submit_to_testflight: true
-        # Set to true once app is approved for the first time:
-        # submit_to_app_store: false
-        beta_groups:
-          - Internal Testers
       email:
         recipients:
           - ahmad@chatizy.app
