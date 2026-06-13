@@ -21,6 +21,7 @@ class LocalMessages extends Table {
   TextColumn get status => text().withDefault(const Constant('pending'))(); // pending, sent, delivered, read, failed
   BoolColumn get isMine => boolean().withDefault(const Constant(true))();
   TextColumn get envelopeId => text().nullable()(); // server envelope UUID after send
+  TextColumn get parentMessageId => text().nullable()(); // ID of parent message being replied to
 
   @override
   Set<Column> get primaryKey => {id};
@@ -90,7 +91,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(localMessages, localMessages.parentMessageId);
+          }
+        },
+      );
 
   static QueryExecutor _openConnection() {
     return driftDatabase(name: 'chatizy_local');
@@ -190,6 +200,15 @@ class AppDatabase extends _$AppDatabase {
     return (update(localConversations)
           ..where((c) => c.id.equals(conversationId)))
         .write(const LocalConversationsCompanion(unreadCount: Value(0)));
+  }
+
+  /// Watch total unread messages count of all conversations except the active one.
+  Stream<int> watchTotalUnreadCountExcept(String activeConversationId) {
+    return watchConversations().map((list) {
+      return list
+          .where((c) => c.id != activeConversationId)
+          .fold<int>(0, (sum, conv) => sum + conv.unreadCount);
+    });
   }
 
   // ── Outbound Queue DAOs ───────────────────────────────────

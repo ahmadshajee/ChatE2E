@@ -11,121 +11,185 @@ import '../database/app_database.dart';
 class ConversationTile extends StatelessWidget {
   final LocalConversation conversation;
   final VoidCallback onTap;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final bool isPinMode;
+  final bool isPinned;
+  final VoidCallback? onPinTap;
 
   const ConversationTile({
     super.key,
     required this.conversation,
     required this.onTap,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.isPinMode = false,
+    this.isPinned = false,
+    this.onPinTap,
   });
+
+  bool _isBusinessConversation(String name) {
+    final cleanName = name.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+    if (cleanName.isEmpty) return false;
+    return cleanName == cleanName.toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
     final initials = _getInitials(conversation.peerDisplayName);
     final hasUnread = conversation.unreadCount > 0;
+    final isBusiness = _isBusinessConversation(conversation.peerDisplayName);
 
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        color: Colors.white,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Avatar
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: _avatarColors(conversation.peerUserId),
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+            if (isSelectionMode)
+              Container(
+                width: 22,
+                height: 22,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF007AFF) : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF007AFF) : const Color(0xFFC7C7CC),
+                    width: 1.5,
                   ),
                 ),
+                child: isSelected
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.white,
+                        size: 14,
+                      )
+                    : null,
+              ),
+
+            // iOS unread indicator blue dot
+            Container(
+              width: 12,
+              height: 12,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: hasUnread ? const Color(0xFF007AFF) : Colors.transparent,
+                shape: BoxShape.circle,
               ),
             ),
 
-            const SizedBox(width: 14),
+            // Avatar
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                borderRadius: isBusiness ? BorderRadius.circular(11) : null,
+                shape: isBusiness ? BoxShape.rectangle : BoxShape.circle,
+                gradient: isBusiness
+                    ? const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFFB4C2E1), Color(0xFF8699C2)],
+                      )
+                    : null,
+                color: isBusiness ? null : const Color(0xFF8C9EC5),
+              ),
+              child: Center(
+                child: isBusiness
+                    ? const Icon(
+                        Icons.business,
+                        color: Colors.white,
+                        size: 26,
+                      )
+                    : Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+              ),
+            ),
 
-            // Name + last message
+            const SizedBox(width: 12),
+
+            // Name + last message + time/chevron
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Name
                       Expanded(
                         child: Text(
                           conversation.peerDisplayName,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
-                            fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
-                            color: const Color(0xFFE9EDEF),
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (conversation.lastMessageAt != null)
-                        Text(
-                          _formatTime(conversation.lastMessageAt!),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: hasUnread
-                                ? const Color(0xFF00A884)
-                                : const Color(0xFF8696A0),
+                      // Time/Date + Chevron or Pinned Button
+                      if (isPinMode)
+                        GestureDetector(
+                          onTap: onPinTap,
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isPinned ? const Color(0xFFFFCC00) : const Color(0xFFE5E5EA),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.push_pin_rounded,
+                              color: isPinned ? Colors.white : const Color(0xFF8E8E93),
+                              size: 16,
+                            ),
                           ),
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (conversation.lastMessageAt != null)
+                              Text(
+                                _formatTime(conversation.lastMessageAt!),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF8E8E93),
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.chevron_right,
+                              color: Color(0xFFC7C7CC),
+                              size: 16,
+                            ),
+                          ],
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          conversation.lastMessage ?? 'No messages yet',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: hasUnread
-                                ? const Color(0xFFD1D7DB)
-                                : const Color(0xFF8696A0),
-                            fontWeight: hasUnread ? FontWeight.w500 : FontWeight.w400,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (hasUnread)
-                        Container(
-                          margin: const EdgeInsets.only(left: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF00A884),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            conversation.unreadCount > 99
-                                ? '99+'
-                                : '${conversation.unreadCount}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                    ],
+                  const SizedBox(height: 2),
+                  // Last Message Snippet (2 lines)
+                  Text(
+                    conversation.lastMessage ?? 'No messages yet',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF8E8E93),
+                      fontWeight: FontWeight.w400,
+                      height: 1.25,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -155,20 +219,7 @@ class ConversationTile extends StatelessWidget {
     } else if (diff.inDays < 7) {
       return DateFormat.E().format(time);
     } else {
-      return DateFormat('MM/dd/yy').format(time);
+      return DateFormat('dd/MM/yy').format(time);
     }
-  }
-
-  List<Color> _avatarColors(String id) {
-    final hash = id.hashCode;
-    final colors = [
-      [const Color(0xFF00A884), const Color(0xFF00CF93)],
-      [const Color(0xFF5856D6), const Color(0xFF7B73F3)],
-      [const Color(0xFFFF6B6B), const Color(0xFFFF8E8E)],
-      [const Color(0xFF4ECDC4), const Color(0xFF6EE7DE)],
-      [const Color(0xFFFFA726), const Color(0xFFFFCC80)],
-      [const Color(0xFF42A5F5), const Color(0xFF90CAF9)],
-    ];
-    return colors[hash.abs() % colors.length];
   }
 }

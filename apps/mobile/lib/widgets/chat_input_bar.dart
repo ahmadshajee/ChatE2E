@@ -1,9 +1,11 @@
 // ============================================================
 //  Chat Input Bar Widget
-//  Message compose bar with text field and send button.
+//  Message compose bar with iOS iMessage style.
 // ============================================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import '../services/sound_service.dart';
 
 class ChatInputBar extends StatefulWidget {
   final Function(String) onSend;
@@ -28,6 +30,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    SoundService().playSend();
     widget.onSend(text);
     _controller.clear();
     setState(() => _hasText = false);
@@ -37,79 +40,114 @@ class _ChatInputBarState extends State<ChatInputBar> {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.only(
-        left: 8,
-        right: 8,
+        left: 10,
+        right: 10,
         top: 8,
         bottom: MediaQuery.of(context).padding.bottom + 8,
       ),
       decoration: const BoxDecoration(
-        color: Color(0xFF1F2C34),
+        color: Colors.white,
         border: Border(
-          top: BorderSide(color: Color(0xFF233138), width: 0.5),
+          top: BorderSide(color: Color(0xFFE5E5EA), width: 0.5),
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Text field
+          // Plus Action Button on the Left
+          GestureDetector(
+            onTap: () {
+              // Custom plus menu action
+            },
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF2F2F7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add,
+                color: Colors.black87,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Text field container with circular border and mic icon inside
           Expanded(
             child: Container(
               constraints: const BoxConstraints(maxHeight: 120),
               decoration: BoxDecoration(
-                color: const Color(0xFF2A3942),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(
-                  color: Color(0xFFE9EDEF),
-                  fontSize: 16,
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFE5E5EA),
+                  width: 0.5,
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'Type a message',
-                  hintStyle: TextStyle(color: Color(0xFF8696A0)),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      maxLines: null,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: 'iMessage',
+                        hintStyle: TextStyle(color: Color(0xFFC7C7CC)),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                      ),
+                      onChanged: (text) {
+                        SoundService().playClick();
+                        setState(() => _hasText = text.trim().isNotEmpty);
+                      },
+                      onSubmitted: (_) => _handleSend(),
+                    ),
                   ),
-                ),
-                onChanged: (text) {
-                  setState(() => _hasText = text.trim().isNotEmpty);
-                },
-                onSubmitted: (_) => _handleSend(),
+                  if (!_hasText)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 12),
+                      child: Icon(
+                        CupertinoIcons.mic_fill,
+                        color: Color(0xFF8E8E93),
+                        size: 18,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
 
-          const SizedBox(width: 8),
-
-          // Send button
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _hasText
-                  ? const Color(0xFF00A884)
-                  : const Color(0xFF00A884).withValues(alpha: 0.4),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(24),
-                onTap: _hasText ? _handleSend : null,
+          // Send button (iOS upward arrow in blue circle, only visible when there's text)
+          if (_hasText) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _handleSend,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF007AFF),
+                  shape: BoxShape.circle,
+                ),
                 child: const Icon(
-                  Icons.send_rounded,
+                  Icons.arrow_upward,
                   color: Colors.white,
-                  size: 22,
+                  size: 18,
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

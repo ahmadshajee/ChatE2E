@@ -18,6 +18,9 @@ dependencies:
   uuid: ^4.5.1
   shared_preferences: ^2.5.3
   intl: ^0.20.0
+  flutter_local_notifications: ^22.0.0
+  background_fetch: ^1.7.0
+  audioplayers: ^6.1.0
 
   # Local database (Drift/SQLite)
   drift: ^2.22.1
@@ -38,4 +41,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sticker_dino_explode.png
+    - assets/profile_saurabh.png
+    - assets/sounds/click.wav
+    - assets/sounds/send.wav
+    - assets/sounds/receive.wav
 

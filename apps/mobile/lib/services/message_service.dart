@@ -17,6 +17,11 @@ import '../crypto/key_manager.dart';
 import '../crypto/session_manager.dart';
 import '../crypto/message_crypto.dart';
 
+import 'package:flutter/widgets.dart';
+import '../screens/chat_room_screen.dart';
+import 'notification_service.dart';
+import 'sound_service.dart';
+
 class MessageService {
   final SupabaseClient _client = Supabase.instance.client;
   final AppDatabase _db;
@@ -38,6 +43,7 @@ class MessageService {
     required String conversationId,
     required String content,
     required String myDeviceId,
+    String? parentMessageId,
   }) async {
     final userId = _currentUserId;
     if (userId == null) throw StateError('Not authenticated');
@@ -54,6 +60,7 @@ class MessageService {
       sentAt: Value(now),
       status: const Value('pending'),
       isMine: const Value(true),
+      parentMessageId: Value(parentMessageId),
     ));
 
     // Update conversation last message
@@ -106,6 +113,7 @@ class MessageService {
           'ciphertext': ciphertext,
           if (headerJson != null) 'header': headerJson,
           'client_message_id': messageId,
+          if (parentMessageId != null) 'parent_message_id': parentMessageId,
         });
 
         // 5. Insert envelope on server
@@ -164,6 +172,7 @@ class MessageService {
       final payloadJson = utf8.decode(base64Decode(rawCiphertext));
       final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
       final ciphertext = payload['ciphertext'] as String;
+      final parentMessageId = payload['parent_message_id'] as String?;
 
       // Get or establish session key
       String? sharedSecret;
@@ -204,6 +213,7 @@ class MessageService {
         status: const Value('delivered'),
         isMine: const Value(false),
         envelopeId: Value(envelopeId),
+        parentMessageId: Value(parentMessageId),
       ));
 
       // Update conversation
@@ -213,6 +223,29 @@ class MessageService {
         now,
         incrementUnread: true,
       );
+      // Trigger local notification if app is in background or this conversation is not active
+      final lifecycleState = WidgetsBinding.instance.lifecycleState;
+      final isAppInBackground = lifecycleState != null && 
+          lifecycleState != AppLifecycleState.resumed;
+      final isCurrentChatActive = ChatRoomScreen.activeConversationId == conversationId;
+
+      if (isAppInBackground || !isCurrentChatActive) {
+        final conversation = await _db.getConversation(conversationId);
+        final senderName = conversation?.peerDisplayName ?? 'New Message';
+        final notifId = clientMessageId.hashCode;
+
+        await NotificationService().showNotification(
+          id: notifId,
+          title: senderName,
+          body: plaintext,
+          payload: conversationId,
+        );
+      }
+      
+      // Play receive sound if the app is in the foreground
+      if (!isAppInBackground) {
+        SoundService().playReceive();
+      }
 
       // Ack the envelope on server
       await _ackEnvelope(envelopeId);

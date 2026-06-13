@@ -6,6 +6,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
@@ -19,6 +20,8 @@ class ChatRoomScreen extends StatefulWidget {
   final String conversationId;
   final String peerName;
   final AppDatabase db;
+
+  static String? activeConversationId;
 
   const ChatRoomScreen({
     super.key,
@@ -36,10 +39,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   late final ScrollController _scrollController;
   String? _myDeviceId;
   bool _isInitialized = false;
+  LocalMessage? _replyingTo;
 
   @override
   void initState() {
     super.initState();
+    ChatRoomScreen.activeConversationId = widget.conversationId;
     _scrollController = ScrollController();
     _initServices();
   }
@@ -65,6 +70,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   void dispose() {
+    if (ChatRoomScreen.activeConversationId == widget.conversationId) {
+      ChatRoomScreen.activeConversationId = null;
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -95,10 +103,17 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
 
     try {
+      final parentId = _replyingTo?.id;
+      if (mounted && _replyingTo != null) {
+        setState(() {
+          _replyingTo = null;
+        });
+      }
       await _messageService.sendMessage(
         conversationId: widget.conversationId,
         content: content,
         myDeviceId: _myDeviceId!,
+        parentMessageId: parentId,
       );
       _scrollToBottom();
     } catch (e) {
@@ -116,81 +131,174 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B141A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1F2C34),
-        elevation: 0,
-        leadingWidth: 30,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFFE9EDEF)),
-          onPressed: () => Navigator.of(context).pop(),
-          padding: EdgeInsets.zero,
-        ),
-        title: Row(
-          children: [
-            // Peer avatar
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF00A884),
-                    const Color(0xFF00CF93),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  _getInitials(widget.peerName),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+      backgroundColor: const Color(0xFFF2F2F7),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(94),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF2F2F7),
+            border: Border(
+              bottom: BorderSide(color: Color(0x1A000000), width: 0.5),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.peerName,
-                  style: const TextStyle(
-                    color: Color(0xFFE9EDEF),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+          ),
+          padding: EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + 5,
+            bottom: 6,
+            left: 12,
+            right: 12,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Back Button Pill
+              GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(19),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.chevron_left,
+                        color: Colors.black,
+                        size: 18,
+                      ),
+                      StreamBuilder<int>(
+                        stream: widget.db.watchTotalUnreadCountExcept(widget.conversationId),
+                        builder: (context, snapshot) {
+                          final count = snapshot.data ?? 0;
+                          if (count == 0) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Container(
+                              width: 18,
+                              height: 18,
+                              decoration: const BoxDecoration(
+                                color: Colors.black,
+                                shape: BoxShape.circle,
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 10,
-                      color: const Color(0xFF00A884).withValues(alpha: 0.7),
+              ),
+
+              // Center Avatar + Info
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF8C9EC5),
                     ),
-                    const SizedBox(width: 3),
+                    child: widget.peerName == 'Saurabh'
+                        ? ClipOval(
+                            child: Image.asset(
+                              'assets/profile_saurabh.png',
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              _getInitials(widget.peerName),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.peerName,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        CupertinoIcons.chevron_right,
+                        color: Colors.grey,
+                        size: 10,
+                      ),
+                    ],
+                  ),
+                  if (widget.peerName == 'Saurabh')
                     const Text(
-                      'End-to-end encrypted',
+                      'Not on Chatizy yet',
                       style: TextStyle(
-                        color: Color(0xFF8696A0),
-                        fontSize: 11,
+                        color: Color(0xFFFF3B30),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                ],
+              ),
+
+              // Videocam Button
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ],
+                child: const Icon(
+                  CupertinoIcons.video_camera,
+                  color: Colors.black,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       body: !_isInitialized
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00A884)),
+              child: CircularProgressIndicator(color: Color(0xFF007AFF)),
             )
           : Column(
               children: [
@@ -229,22 +337,148 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         _scrollToBottom();
                       });
 
+                      final messageMap = {for (var m in messages) m.id: m};
+
                       return ListView.builder(
                         controller: _scrollController,
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: messages.length,
+                        itemCount: messages.length + (widget.peerName == 'Saurabh' ? 1 : 0),
                         itemBuilder: (context, index) {
-                          return MessageBubble(message: messages[index]);
+                          if (widget.peerName == 'Saurabh') {
+                            if (index == 0) {
+                              return _buildInviteBanner();
+                            }
+                            final msg = messages[index - 1];
+                            final parentMsg = msg.parentMessageId != null ? messageMap[msg.parentMessageId] : null;
+                            return MessageBubble(
+                              message: msg,
+                              parentMessage: parentMsg,
+                              onReply: () {
+                                setState(() {
+                                  _replyingTo = msg;
+                                });
+                              },
+                              onParentMessageTap: msg.parentMessageId == null ? null : () {
+                                final parentIndex = messages.indexWhere((m) => m.id == msg.parentMessageId);
+                                if (parentIndex != -1) {
+                                  final targetIndex = parentIndex + 1;
+                                  final offset = targetIndex * 75.0;
+                                  _scrollController.animateTo(
+                                    offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                            );
+                          }
+                          final msg = messages[index];
+                          final parentMsg = msg.parentMessageId != null ? messageMap[msg.parentMessageId] : null;
+                          return MessageBubble(
+                            message: msg,
+                            parentMessage: parentMsg,
+                            onReply: () {
+                              setState(() {
+                                _replyingTo = msg;
+                              });
+                            },
+                            onParentMessageTap: msg.parentMessageId == null ? null : () {
+                              final parentIndex = messages.indexWhere((m) => m.id == msg.parentMessageId);
+                              if (parentIndex != -1) {
+                                final offset = parentIndex * 75.0;
+                                _scrollController.animateTo(
+                                  offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
+                          );
                         },
                       );
                     },
                   ),
                 ),
 
+                // Reply preview banner
+                _buildReplyPreview(),
+
                 // Input bar
                 ChatInputBar(onSend: _handleSend),
               ],
             ),
+    );
+  }
+
+  Widget _buildInviteBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x1F000000), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            CupertinoIcons.info_circle,
+            color: Color(0xFFFF3B30),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Saurabh is not a user yet',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Invite them to Chatizy to start E2E encrypted chats.',
+                  style: TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Invitation sent to Saurabh!'),
+                  backgroundColor: Color(0xFF007AFF),
+                ),
+              );
+            },
+            child: const Text(
+              'Invite',
+              style: TextStyle(
+                color: Color(0xFF007AFF),
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -254,5 +488,84 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingTo == null) return const SizedBox.shrink();
+
+    final isMine = _replyingTo!.isMine;
+    final senderName = isMine ? 'You' : 'Them';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF2F2F7),
+        border: Border(
+          top: BorderSide(color: Color(0x1A000000), width: 0.5),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0x1F000000), width: 0.5),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            // Left accent bar
+            Container(
+              width: 4,
+              height: 36,
+              decoration: BoxDecoration(
+                color: const Color(0xFF007AFF),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Text details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Replying to $senderName',
+                    style: const TextStyle(
+                      color: Color(0xFF007AFF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _replyingTo!.content,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Cancel button
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _replyingTo = null;
+                });
+              },
+              child: const Icon(
+                CupertinoIcons.xmark_circle_fill,
+                color: Color(0xFF8E8E93),
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
