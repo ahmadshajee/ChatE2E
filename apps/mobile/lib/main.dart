@@ -1,9 +1,11 @@
 // ============================================================
 //  Main Entry Point
-//  Initializes Supabase, local database, and crypto services.
+//  Initializes Firebase, Supabase, local database, and crypto.
 // ============================================================
 
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:background_fetch/background_fetch.dart';
 
@@ -35,21 +37,22 @@ void backgroundFetchHeadlessTask(HeadlessEvent task) async {
     WidgetsFlutterBinding.ensureInitialized();
 
     final db = AppDatabase();
+    await Firebase.initializeApp();
     await Supabase.initialize(
       url: SupabaseConfig.supabaseUrl,
-      anonKey: SupabaseConfig.supabaseAnonKey,
+      publishableKey: SupabaseConfig.supabaseAnonKey,
     );
 
     await NotificationService().init();
 
     final keyManager = KeyManager(db);
-    final deviceService = DeviceService(db, keyManager);
+    final deviceService = DeviceService(keyManager);
     final isRegistered = await deviceService.isDeviceRegistered();
     final deviceId = await deviceService.getOrCreateDeviceId();
 
     if (isRegistered && deviceId.isNotEmpty) {
       final sessionManager = SessionManager(db, keyManager);
-      final messageService = MessageService(db, keyManager, sessionManager);
+      final messageService = MessageService(db, sessionManager);
       await messageService.catchUp(deviceId);
       print('[BackgroundFetch] Headless message catchup completed successfully.');
     }
@@ -79,13 +82,13 @@ Future<void> _configureBackgroundFetch() async {
       print('[BackgroundFetch] Event received: $taskId');
       try {
         final keyManager = KeyManager(appDatabase);
-        final deviceService = DeviceService(appDatabase, keyManager);
+        final deviceService = DeviceService(keyManager);
         final isRegistered = await deviceService.isDeviceRegistered();
         final deviceId = await deviceService.getOrCreateDeviceId();
 
         if (isRegistered && deviceId.isNotEmpty) {
           final sessionManager = SessionManager(appDatabase, keyManager);
-          final messageService = MessageService(appDatabase, keyManager, sessionManager);
+          final messageService = MessageService(appDatabase, sessionManager);
           await messageService.catchUp(deviceId);
         }
       } catch (e) {
@@ -112,15 +115,21 @@ Future<void> main() async {
   // Initialize Drift database (chatizy_local)
   appDatabase = AppDatabase();
 
+  // Initialize Firebase (must be before FCM)
+  await Firebase.initializeApp();
+
+  // Register FCM background message handler (must be top-level)
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   // Initialize Supabase
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
-    anonKey: SupabaseConfig.supabaseAnonKey,
+    publishableKey: SupabaseConfig.supabaseAnonKey,
   );
 
   runApp(ChatizyApp(db: appDatabase));
 
-  // Initialize local notifications and configure BackgroundFetch asynchronously
+  // Initialize local notifications, FCM, and BackgroundFetch asynchronously
   Future.microtask(() async {
     try {
       await SoundService().init();

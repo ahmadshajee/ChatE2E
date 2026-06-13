@@ -22,6 +22,7 @@ class LocalMessages extends Table {
   BoolColumn get isMine => boolean().withDefault(const Constant(true))();
   TextColumn get envelopeId => text().nullable()(); // server envelope UUID after send
   TextColumn get parentMessageId => text().nullable()(); // ID of parent message being replied to
+  TextColumn get reaction => text().nullable()(); // nullable tapback emoji reaction
 
   @override
   Set<Column> get primaryKey => {id};
@@ -91,13 +92,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(localMessages, localMessages.parentMessageId);
+          }
+          if (from < 3) {
+            await m.addColumn(localMessages, localMessages.reaction);
           }
         },
       );
@@ -129,6 +133,22 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Watch thread replies for a specific parent message.
+  Stream<List<LocalMessage>> watchThreadReplies(String parentMessageId) {
+    return (select(localMessages)
+          ..where((m) => m.parentMessageId.equals(parentMessageId))
+          ..orderBy([(m) => OrderingTerm.asc(m.sentAt)]))
+        .watch();
+  }
+
+  /// Get thread reply count for a specific parent message.
+  Future<int> getThreadReplyCount(String parentMessageId) async {
+    final replies = await (select(localMessages)
+          ..where((m) => m.parentMessageId.equals(parentMessageId)))
+        .get();
+    return replies.length;
+  }
+
   /// Update message status.
   Future<void> updateMessageStatus(String messageId, String status) {
     return (update(localMessages)..where((m) => m.id.equals(messageId)))
@@ -139,6 +159,17 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateMessageEnvelopeId(String messageId, String envelopeId) {
     return (update(localMessages)..where((m) => m.id.equals(messageId)))
         .write(LocalMessagesCompanion(envelopeId: Value(envelopeId)));
+  }
+
+  /// Delete a message by ID.
+  Future<void> deleteMessage(String id) {
+    return (delete(localMessages)..where((m) => m.id.equals(id))).go();
+  }
+
+  /// Update message reaction.
+  Future<void> updateMessageReaction(String messageId, String? reaction) {
+    return (update(localMessages)..where((m) => m.id.equals(messageId)))
+        .write(LocalMessagesCompanion(reaction: Value(reaction)));
   }
 
   // ── Conversation DAOs ─────────────────────────────────────

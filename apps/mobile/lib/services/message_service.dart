@@ -13,7 +13,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
-import '../crypto/key_manager.dart';
 import '../crypto/session_manager.dart';
 import '../crypto/message_crypto.dart';
 
@@ -25,10 +24,9 @@ import 'sound_service.dart';
 class MessageService {
   final SupabaseClient _client = Supabase.instance.client;
   final AppDatabase _db;
-  final KeyManager _keyManager;
   final SessionManager _sessionManager;
 
-  MessageService(this._db, this._keyManager, this._sessionManager);
+  MessageService(this._db, this._sessionManager);
 
   String? get _currentUserId => _client.auth.currentUser?.id;
 
@@ -111,9 +109,9 @@ class MessageService {
         // Build the envelope payload (ciphertext + optional header)
         final envelopePayload = jsonEncode({
           'ciphertext': ciphertext,
-          if (headerJson != null) 'header': headerJson,
+          'header':? headerJson,
           'client_message_id': messageId,
-          if (parentMessageId != null) 'parent_message_id': parentMessageId,
+          'parent_message_id':? parentMessageId,
         });
 
         // 5. Insert envelope on server
@@ -144,6 +142,77 @@ class MessageService {
       print('Send error: $e');
       await _db.updateMessageStatus(messageId, 'failed');
       rethrow;
+    }
+  }
+
+  /// Send a reaction to a message.
+  Future<void> sendReaction({
+    required String conversationId,
+    required String messageId,
+    required String? emoji,
+    required String myDeviceId,
+  }) async {
+    final userId = _currentUserId;
+    if (userId == null) throw StateError('Not authenticated');
+
+    // 1. Update reaction locally
+    await _db.updateMessageReaction(messageId, emoji);
+
+    // 2. Format reaction payload text: [reaction:EMOJI:message_id]
+    final payloadText = '[reaction:${emoji ?? 'null'}:$messageId]';
+
+    try {
+      // 3. Find the recipient's active devices
+      final peerDevices = await _findPeerDevices(conversationId, userId);
+      if (peerDevices.isEmpty) return;
+
+      // 4. For each peer device, encrypt and send
+      for (final device in peerDevices) {
+        final targetDeviceId = device['id'] as String;
+        final targetUserId = device['user_id'] as String;
+
+        // Check for existing session
+        String? sharedSecret = await _sessionManager.getSessionKey(myDeviceId, targetDeviceId);
+        String envelopeType = 'message';
+        Map<String, dynamic>? headerJson;
+
+        if (sharedSecret == null) {
+          // No session — initiate X3DH
+          final bundle = await _fetchPrekeyBundle(targetDeviceId, targetUserId);
+          if (bundle == null) continue;
+          final result = await _sessionManager.initiateSession(myDeviceId, bundle);
+          sharedSecret = result.sharedSecret;
+          headerJson = result.header.toJson();
+          envelopeType = 'prekey_message';
+
+          if (bundle.oneTimePrekeyId != null) {
+            await _consumeOneTimePrekey(targetDeviceId, bundle.oneTimePrekeyId!);
+          }
+        }
+
+        // Encrypt the payload
+        final ciphertext = await MessageCrypto.encrypt(payloadText, sharedSecret);
+
+        // Build envelope payload
+        final envelopePayload = jsonEncode({
+          'ciphertext': ciphertext,
+          'header':? headerJson,
+          'client_message_id': const Uuid().v4(),
+        });
+
+        // Insert envelope on server (control message envelope)
+        await _client.from('device_envelopes').insert({
+          'conversation_id': conversationId,
+          'sender_device_id': myDeviceId,
+          'target_device_id': targetDeviceId,
+          'client_message_id': const Uuid().v4(),
+          'ciphertext': base64Encode(utf8.encode(envelopePayload)),
+          'envelope_type': envelopeType,
+          'status': 'pending',
+        });
+      }
+    } catch (e) {
+      print('Send reaction error: $e');
     }
   }
 
@@ -198,6 +267,26 @@ class MessageService {
 
       // Decrypt the message
       final plaintext = await MessageCrypto.decrypt(ciphertext, sharedSecret);
+
+      // Check if it's a reaction update
+      if (plaintext.startsWith('[reaction:') && plaintext.endsWith(']')) {
+        final parts = plaintext.substring(10, plaintext.length - 1).split(':');
+        if (parts.length >= 2) {
+          final emoji = parts[0];
+          final targetMessageId = parts[1];
+          await _db.updateMessageReaction(targetMessageId, emoji == 'null' ? null : emoji);
+          
+          final lifecycleState = WidgetsBinding.instance.lifecycleState;
+          final isAppActive = lifecycleState == null || 
+              lifecycleState == AppLifecycleState.resumed;
+          if (isAppActive) {
+            SoundService().playClick();
+          }
+          
+          await _ackEnvelope(envelopeId);
+          return;
+        }
+      }
 
       // Find the sender's user ID from the device
       final senderUserId = await _getDeviceOwner(senderDeviceId);

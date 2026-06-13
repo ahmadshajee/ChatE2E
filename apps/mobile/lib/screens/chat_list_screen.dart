@@ -68,9 +68,9 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     _keyManager = KeyManager(widget.db);
     _sessionManager = SessionManager(widget.db, _keyManager);
-    _deviceService = DeviceService(widget.db, _keyManager);
+    _deviceService = DeviceService(_keyManager);
     _conversationService = ConversationService(widget.db);
-    _messageService = MessageService(widget.db, _keyManager, _sessionManager);
+    _messageService = MessageService(widget.db, _sessionManager);
     _initialize();
   }
 
@@ -1191,7 +1191,7 @@ class _ChatListScreenState extends State<ChatListScreen> with WidgetsBindingObse
                     return ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: filteredConversations.length,
-                      separatorBuilder: (_, __) => const Padding(
+                      separatorBuilder: (_, _) => const Padding(
                         padding: EdgeInsets.only(left: 76),
                         child: Divider(
                           height: 0.5,

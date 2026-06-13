@@ -100,7 +100,6 @@ class SessionManager {
 
     // 2. Generate ephemeral keypair
     final ephemeralKp = await _x25519.newKeyPair();
-    final ephemeralPrivBytes = await ephemeralKp.extractPrivateKeyBytes();
     final ephemeralPubKey = await ephemeralKp.extractPublicKey();
     final ephemeralPubB64 = base64Encode(Uint8List.fromList(ephemeralPubKey.bytes));
 

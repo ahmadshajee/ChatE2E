@@ -105,6 +105,17 @@ class $LocalMessagesTable extends LocalMessages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _reactionMeta = const VerificationMeta(
+    'reaction',
+  );
+  @override
+  late final GeneratedColumn<String> reaction = GeneratedColumn<String>(
+    'reaction',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -116,6 +127,7 @@ class $LocalMessagesTable extends LocalMessages
     isMine,
     envelopeId,
     parentMessageId,
+    reaction,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -196,6 +208,12 @@ class $LocalMessagesTable extends LocalMessages
         ),
       );
     }
+    if (data.containsKey('reaction')) {
+      context.handle(
+        _reactionMeta,
+        reaction.isAcceptableOrUnknown(data['reaction']!, _reactionMeta),
+      );
+    }
     return context;
   }
 
@@ -241,6 +259,10 @@ class $LocalMessagesTable extends LocalMessages
         DriftSqlType.string,
         data['${effectivePrefix}parent_message_id'],
       ),
+      reaction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reaction'],
+      ),
     );
   }
 
@@ -260,6 +282,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
   final bool isMine;
   final String? envelopeId;
   final String? parentMessageId;
+  final String? reaction;
   const LocalMessage({
     required this.id,
     required this.conversationId,
@@ -270,6 +293,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
     required this.isMine,
     this.envelopeId,
     this.parentMessageId,
+    this.reaction,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -286,6 +310,9 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
     }
     if (!nullToAbsent || parentMessageId != null) {
       map['parent_message_id'] = Variable<String>(parentMessageId);
+    }
+    if (!nullToAbsent || reaction != null) {
+      map['reaction'] = Variable<String>(reaction);
     }
     return map;
   }
@@ -305,6 +332,9 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
       parentMessageId: parentMessageId == null && nullToAbsent
           ? const Value.absent()
           : Value(parentMessageId),
+      reaction: reaction == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reaction),
     );
   }
 
@@ -323,6 +353,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
       isMine: serializer.fromJson<bool>(json['isMine']),
       envelopeId: serializer.fromJson<String?>(json['envelopeId']),
       parentMessageId: serializer.fromJson<String?>(json['parentMessageId']),
+      reaction: serializer.fromJson<String?>(json['reaction']),
     );
   }
   @override
@@ -338,6 +369,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
       'isMine': serializer.toJson<bool>(isMine),
       'envelopeId': serializer.toJson<String?>(envelopeId),
       'parentMessageId': serializer.toJson<String?>(parentMessageId),
+      'reaction': serializer.toJson<String?>(reaction),
     };
   }
 
@@ -351,6 +383,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
     bool? isMine,
     Value<String?> envelopeId = const Value.absent(),
     Value<String?> parentMessageId = const Value.absent(),
+    Value<String?> reaction = const Value.absent(),
   }) => LocalMessage(
     id: id ?? this.id,
     conversationId: conversationId ?? this.conversationId,
@@ -363,6 +396,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
     parentMessageId: parentMessageId.present
         ? parentMessageId.value
         : this.parentMessageId,
+    reaction: reaction.present ? reaction.value : this.reaction,
   );
   LocalMessage copyWithCompanion(LocalMessagesCompanion data) {
     return LocalMessage(
@@ -381,6 +415,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
       parentMessageId: data.parentMessageId.present
           ? data.parentMessageId.value
           : this.parentMessageId,
+      reaction: data.reaction.present ? data.reaction.value : this.reaction,
     );
   }
 
@@ -395,7 +430,8 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
           ..write('status: $status, ')
           ..write('isMine: $isMine, ')
           ..write('envelopeId: $envelopeId, ')
-          ..write('parentMessageId: $parentMessageId')
+          ..write('parentMessageId: $parentMessageId, ')
+          ..write('reaction: $reaction')
           ..write(')'))
         .toString();
   }
@@ -411,6 +447,7 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
     isMine,
     envelopeId,
     parentMessageId,
+    reaction,
   );
   @override
   bool operator ==(Object other) =>
@@ -424,7 +461,8 @@ class LocalMessage extends DataClass implements Insertable<LocalMessage> {
           other.status == this.status &&
           other.isMine == this.isMine &&
           other.envelopeId == this.envelopeId &&
-          other.parentMessageId == this.parentMessageId);
+          other.parentMessageId == this.parentMessageId &&
+          other.reaction == this.reaction);
 }
 
 class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
@@ -437,6 +475,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
   final Value<bool> isMine;
   final Value<String?> envelopeId;
   final Value<String?> parentMessageId;
+  final Value<String?> reaction;
   final Value<int> rowid;
   const LocalMessagesCompanion({
     this.id = const Value.absent(),
@@ -448,6 +487,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
     this.isMine = const Value.absent(),
     this.envelopeId = const Value.absent(),
     this.parentMessageId = const Value.absent(),
+    this.reaction = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalMessagesCompanion.insert({
@@ -460,6 +500,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
     this.isMine = const Value.absent(),
     this.envelopeId = const Value.absent(),
     this.parentMessageId = const Value.absent(),
+    this.reaction = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        conversationId = Value(conversationId),
@@ -476,6 +517,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
     Expression<bool>? isMine,
     Expression<String>? envelopeId,
     Expression<String>? parentMessageId,
+    Expression<String>? reaction,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -488,6 +530,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
       if (isMine != null) 'is_mine': isMine,
       if (envelopeId != null) 'envelope_id': envelopeId,
       if (parentMessageId != null) 'parent_message_id': parentMessageId,
+      if (reaction != null) 'reaction': reaction,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -502,6 +545,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
     Value<bool>? isMine,
     Value<String?>? envelopeId,
     Value<String?>? parentMessageId,
+    Value<String?>? reaction,
     Value<int>? rowid,
   }) {
     return LocalMessagesCompanion(
@@ -514,6 +558,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
       isMine: isMine ?? this.isMine,
       envelopeId: envelopeId ?? this.envelopeId,
       parentMessageId: parentMessageId ?? this.parentMessageId,
+      reaction: reaction ?? this.reaction,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -548,6 +593,9 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
     if (parentMessageId.present) {
       map['parent_message_id'] = Variable<String>(parentMessageId.value);
     }
+    if (reaction.present) {
+      map['reaction'] = Variable<String>(reaction.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -566,6 +614,7 @@ class LocalMessagesCompanion extends UpdateCompanion<LocalMessage> {
           ..write('isMine: $isMine, ')
           ..write('envelopeId: $envelopeId, ')
           ..write('parentMessageId: $parentMessageId, ')
+          ..write('reaction: $reaction, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2283,6 +2332,7 @@ typedef $$LocalMessagesTableCreateCompanionBuilder =
       Value<bool> isMine,
       Value<String?> envelopeId,
       Value<String?> parentMessageId,
+      Value<String?> reaction,
       Value<int> rowid,
     });
 typedef $$LocalMessagesTableUpdateCompanionBuilder =
@@ -2296,6 +2346,7 @@ typedef $$LocalMessagesTableUpdateCompanionBuilder =
       Value<bool> isMine,
       Value<String?> envelopeId,
       Value<String?> parentMessageId,
+      Value<String?> reaction,
       Value<int> rowid,
     });
 
@@ -2350,6 +2401,11 @@ class $$LocalMessagesTableFilterComposer
 
   ColumnFilters<String> get parentMessageId => $composableBuilder(
     column: $table.parentMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reaction => $composableBuilder(
+    column: $table.reaction,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2407,6 +2463,11 @@ class $$LocalMessagesTableOrderingComposer
     column: $table.parentMessageId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get reaction => $composableBuilder(
+    column: $table.reaction,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$LocalMessagesTableAnnotationComposer
@@ -2450,6 +2511,9 @@ class $$LocalMessagesTableAnnotationComposer
     column: $table.parentMessageId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get reaction =>
+      $composableBuilder(column: $table.reaction, builder: (column) => column);
 }
 
 class $$LocalMessagesTableTableManager
@@ -2492,6 +2556,7 @@ class $$LocalMessagesTableTableManager
                 Value<bool> isMine = const Value.absent(),
                 Value<String?> envelopeId = const Value.absent(),
                 Value<String?> parentMessageId = const Value.absent(),
+                Value<String?> reaction = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalMessagesCompanion(
                 id: id,
@@ -2503,6 +2568,7 @@ class $$LocalMessagesTableTableManager
                 isMine: isMine,
                 envelopeId: envelopeId,
                 parentMessageId: parentMessageId,
+                reaction: reaction,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2516,6 +2582,7 @@ class $$LocalMessagesTableTableManager
                 Value<bool> isMine = const Value.absent(),
                 Value<String?> envelopeId = const Value.absent(),
                 Value<String?> parentMessageId = const Value.absent(),
+                Value<String?> reaction = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalMessagesCompanion.insert(
                 id: id,
@@ -2527,6 +2594,7 @@ class $$LocalMessagesTableTableManager
                 isMine: isMine,
                 envelopeId: envelopeId,
                 parentMessageId: parentMessageId,
+                reaction: reaction,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

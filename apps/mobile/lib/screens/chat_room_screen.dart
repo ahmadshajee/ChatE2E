@@ -15,6 +15,7 @@ import '../crypto/session_manager.dart';
 import '../services/message_service.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_bar.dart';
+import '../widgets/thread_reply_view.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String conversationId;
@@ -52,7 +53,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Future<void> _initServices() async {
     final keyManager = KeyManager(widget.db);
     final sessionManager = SessionManager(widget.db, keyManager);
-    _messageService = MessageService(widget.db, keyManager, sessionManager);
+    _messageService = MessageService(widget.db, sessionManager);
 
     final prefs = await SharedPreferences.getInstance();
     _myDeviceId = prefs.getString('chatizy_device_id');
@@ -126,6 +127,36 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         );
       }
     }
+  }
+
+  /// Open the iMessage-style thread reply overlay
+  void _openThreadReply(LocalMessage message) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierDismissible: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (context, _, __) {
+          return ThreadReplyView(
+            parentMessage: message,
+            db: widget.db,
+            conversationId: widget.conversationId,
+            peerName: widget.peerName,
+            onSendReply: (content, parentId) async {
+              if (_myDeviceId == null) return;
+              await _messageService.sendMessage(
+                conversationId: widget.conversationId,
+                content: content,
+                myDeviceId: _myDeviceId!,
+                parentMessageId: parentId,
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -353,11 +384,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                             return MessageBubble(
                               message: msg,
                               parentMessage: parentMsg,
-                              onReply: () {
-                                setState(() {
-                                  _replyingTo = msg;
-                                });
-                              },
+                              onReply: () => _openThreadReply(msg),
+                              onDelete: () => _deleteMessage(msg),
+                              onForward: () => _forwardMessage(msg),
+                              onReaction: (emoji) => _handleReaction(msg, emoji),
                               onParentMessageTap: msg.parentMessageId == null ? null : () {
                                 final parentIndex = messages.indexWhere((m) => m.id == msg.parentMessageId);
                                 if (parentIndex != -1) {
@@ -377,11 +407,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                           return MessageBubble(
                             message: msg,
                             parentMessage: parentMsg,
-                            onReply: () {
-                              setState(() {
-                                _replyingTo = msg;
-                              });
-                            },
+                            onReply: () => _openThreadReply(msg),
+                            onDelete: () => _deleteMessage(msg),
+                            onForward: () => _forwardMessage(msg),
+                            onReaction: (emoji) => _handleReaction(msg, emoji),
                             onParentMessageTap: msg.parentMessageId == null ? null : () {
                               final parentIndex = messages.indexWhere((m) => m.id == msg.parentMessageId);
                               if (parentIndex != -1) {
@@ -400,11 +429,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   ),
                 ),
 
-                // Reply preview banner
-                _buildReplyPreview(),
-
-                // Input bar
-                ChatInputBar(onSend: _handleSend),
+                // Input bar (with integrated reply preview)
+                ChatInputBar(
+                  onSend: _handleSend,
+                  replyingTo: _replyingTo,
+                  onCancelReply: () {
+                    setState(() => _replyingTo = null);
+                  },
+                ),
               ],
             ),
     );
@@ -482,6 +514,82 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  Future<void> _deleteMessage(LocalMessage message) async {
+    await widget.db.deleteMessage(message.id);
+  }
+
+  Future<void> _handleReaction(LocalMessage message, String? emoji) async {
+    if (_myDeviceId != null) {
+      await _messageService.sendReaction(
+        conversationId: widget.conversationId,
+        messageId: message.id,
+        emoji: emoji,
+        myDeviceId: _myDeviceId!,
+      );
+    }
+  }
+
+  void _forwardMessage(LocalMessage message) async {
+    final conversations = await widget.db.getConversations();
+    final otherConversations =
+        conversations.where((c) => c.id != widget.conversationId).toList();
+
+    if (otherConversations.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No other conversations to forward to'),
+            backgroundColor: Color(0xFFFF3B30),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) {
+        return CupertinoActionSheet(
+          title: const Text('Forward Message To'),
+          message: const Text('Select a conversation to forward this message to'),
+          actions: otherConversations.map((conv) {
+            return CupertinoActionSheetAction(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (_myDeviceId != null) {
+                  await _messageService.sendMessage(
+                    conversationId: conv.id,
+                    content: message.content,
+                    myDeviceId: _myDeviceId!,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Forwarded to ${conv.peerDisplayName}'),
+                        backgroundColor: const Color(0xFF007AFF),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(
+                conv.peerDisplayName,
+                style: const TextStyle(color: Color(0xFF007AFF)),
+              ),
+            );
+          }).toList(),
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        );
+      },
+    );
+  }
+
   String _getInitials(String name) {
     final parts = name.trim().split(' ');
     if (parts.length >= 2) {
@@ -490,82 +598,4 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
-  Widget _buildReplyPreview() {
-    if (_replyingTo == null) return const SizedBox.shrink();
-
-    final isMine = _replyingTo!.isMine;
-    final senderName = isMine ? 'You' : 'Them';
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF2F2F7),
-        border: Border(
-          top: BorderSide(color: Color(0x1A000000), width: 0.5),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0x1F000000), width: 0.5),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            // Left accent bar
-            Container(
-              width: 4,
-              height: 36,
-              decoration: BoxDecoration(
-                color: const Color(0xFF007AFF),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Text details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Replying to $senderName',
-                    style: const TextStyle(
-                      color: Color(0xFF007AFF),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _replyingTo!.content,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Cancel button
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _replyingTo = null;
-                });
-              },
-              child: const Icon(
-                CupertinoIcons.xmark_circle_fill,
-                color: Color(0xFF8E8E93),
-                size: 20,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

@@ -1,27 +1,20 @@
-// ============================================================
-//  Device Service
-//  Handles device registration with REAL crypto keys.
-//  Registers directly via Supabase client inserts (not Edge Function).
-// ============================================================
-
 import 'dart:io' show Platform;
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
-import '../database/app_database.dart';
 import '../crypto/key_manager.dart';
+import 'notification_service.dart';
 
 class DeviceService {
   static const String _deviceIdKey = 'chatizy_device_id';
   static const String _deviceRegisteredKey = 'chatizy_device_registered';
 
   final SupabaseClient _client = Supabase.instance.client;
-  final AppDatabase _db;
   final KeyManager _keyManager;
 
-  DeviceService(this._db, this._keyManager);
+  DeviceService(this._keyManager);
 
   /// Get or create a persistent device ID.
   Future<String> getOrCreateDeviceId() async {
@@ -121,6 +114,13 @@ class DeviceService {
       await prefs.setString(_deviceIdKey, registeredDeviceId);
       await prefs.setBool(_deviceRegisteredKey, true);
 
+      // 10. Upload FCM push token for this device
+      try {
+        await NotificationService().uploadTokenForDevice(registeredDeviceId);
+      } catch (e) {
+        print('[DeviceService] FCM token upload failed (non-fatal): $e');
+      }
+
       return {
         'success': true,
         'device_id': registeredDeviceId,
@@ -134,3 +134,4 @@ class DeviceService {
     }
   }
 }
+
